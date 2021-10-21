@@ -1,8 +1,7 @@
 package dev.arbjerg.ukulele.jda
 
-import net.dv8tion.jda.api.events.DisconnectEvent
-import net.dv8tion.jda.api.events.ReadyEvent
 import net.dv8tion.jda.api.events.StatusChangeEvent
+import net.dv8tion.jda.api.events.guild.voice.GuildVoiceLeaveEvent
 import net.dv8tion.jda.api.events.message.guild.GuildMessageReceivedEvent
 import net.dv8tion.jda.api.hooks.ListenerAdapter
 import org.slf4j.Logger
@@ -23,4 +22,11 @@ class EventHandler(private val commandManager: CommandManager) : ListenerAdapter
         log.info("{}: {} -> {}", event.entity.shardInfo, event.oldStatus, event.newStatus)
     }
 
+    override fun onGuildVoiceLeave(event: GuildVoiceLeaveEvent) {
+        if(event.guild.audioManager.connectedChannel?.members?.size == 1)
+        {
+            log.info("I'm alone, disconnecting")
+            event.guild.audioManager.closeAudioConnection();
+        }
+    }
 }
