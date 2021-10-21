@@ -5,6 +5,7 @@ import dev.arbjerg.ukulele.audio.PlayerRegistry
 import dev.arbjerg.ukulele.config.BotProps
 import dev.arbjerg.ukulele.data.GuildProperties
 import dev.arbjerg.ukulele.features.HelpContext
+import net.dv8tion.jda.api.Permission
 import net.dv8tion.jda.api.entities.Guild
 import net.dv8tion.jda.api.entities.Member
 import net.dv8tion.jda.api.entities.Message
@@ -31,8 +32,8 @@ class CommandContext(
     ) {
         lateinit var commandManager: CommandManager
     }
-
-    val player: Player by lazy { beans.players.get(guild, guildProperties) }
+    val vc = guild.selfMember.voiceState?.channel;
+    val player: Player by lazy { beans.players.get(guild, guildProperties, this) }
 
     /** The command argument text after the trigger */
     val argumentText: String by lazy {
@@ -61,5 +62,33 @@ class CommandContext(
     fun handleException(t: Throwable) {
         command.log.error("Handled exception occurred", t)
         reply("An exception occurred!\n`${t.message}`")
+    }
+
+    fun ensureVoiceChannel(): Boolean {
+        val theirVc = invoker.voiceState?.channel
+
+        if (vc == null && theirVc == null) {
+            reply("You need to be in a voice channel")
+            return false
+        }
+
+        if (vc != theirVc && theirVc != null)  {
+            val canTalk = selfMember.hasPermission(Permission.VOICE_CONNECT, Permission.VOICE_SPEAK)
+            if (!canTalk) {
+                reply("I need permission to connect and speak in ${theirVc.name}")
+                return false
+            }
+
+            guild.audioManager.openAudioConnection(theirVc)
+            guild.audioManager.sendingHandler = player
+            return true
+        }
+
+        return vc != null
+    }
+
+    fun disconnect() {
+        reply("No more songs in queue, disconnecting...")
+        guild.audioManager.closeAudioConnection();
     }
 }

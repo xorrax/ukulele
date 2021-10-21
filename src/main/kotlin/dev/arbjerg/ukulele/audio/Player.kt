@@ -9,7 +9,9 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrackEndReason
 import com.sedmelluq.discord.lavaplayer.track.playback.MutableAudioFrame
 import dev.arbjerg.ukulele.data.GuildProperties
 import dev.arbjerg.ukulele.data.GuildPropertiesService
+import dev.arbjerg.ukulele.jda.CommandContext
 import net.dv8tion.jda.api.audio.AudioSendHandler
+import net.dv8tion.jda.api.managers.AudioManager
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -17,13 +19,13 @@ import java.nio.Buffer
 import java.nio.ByteBuffer
 
 
-class Player(val beans: Beans, guildProperties: GuildProperties) : AudioEventAdapter(), AudioSendHandler {
+class Player(val beans: Beans, guildProperties: GuildProperties, cc: CommandContext) : AudioEventAdapter(), AudioSendHandler {
     @Component
     class Beans(
             val apm: AudioPlayerManager,
             val guildProperties: GuildPropertiesService
     )
-
+    private val context = cc
     private val guildId = guildProperties.guildId
     private val queue = TrackQueue()
     private val player = beans.apm.createPlayer().apply {
@@ -112,6 +114,9 @@ class Player(val beans: Beans, guildProperties: GuildProperties) : AudioEventAda
         if (isRepeating && endReason.mayStartNext) {
             queue.add(track.makeClone())
         }
+        else if(queue.peek() == null)
+            context.disconnect()
+
         val new = queue.take() ?: return
         player.playTrack(new)
     }
