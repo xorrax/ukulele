@@ -87,6 +87,10 @@ class CommandContext(
         return vc != null
     }
 
+    fun emptyQueue() {
+        reply("No more songs in queue, disconnecting in 1 minute!")
+    }
+
     fun disconnect() {
         reply("No more songs in queue, disconnecting...")
         guild.audioManager.closeAudioConnection();

@@ -11,7 +11,7 @@ import dev.arbjerg.ukulele.data.GuildProperties
 import dev.arbjerg.ukulele.data.GuildPropertiesService
 import dev.arbjerg.ukulele.jda.CommandContext
 import net.dv8tion.jda.api.audio.AudioSendHandler
-import net.dv8tion.jda.api.managers.AudioManager
+import kotlinx.coroutines.*
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -110,12 +110,23 @@ class Player(val beans: Beans, guildProperties: GuildProperties, cc: CommandCont
         player.stopTrack()
     }
 
+    fun  delayedDisconnect() = runBlocking{
+        launch {
+            delay(60000L)
+            if(queue.peek() == null)
+                context.disconnect()
+        }
+    }
+
     override fun onTrackEnd(player: AudioPlayer, track: AudioTrack, endReason: AudioTrackEndReason) {
         if (isRepeating && endReason.mayStartNext) {
             queue.add(track.makeClone())
         }
-        else if(queue.peek() == null)
-            context.disconnect()
+        else if(queue.peek() == null) {
+            context.emptyQueue()
+            delayedDisconnect();
+        }
+
 
         val new = queue.take() ?: return
         player.playTrack(new)
