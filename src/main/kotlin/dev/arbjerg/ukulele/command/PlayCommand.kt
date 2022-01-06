@@ -11,23 +11,64 @@ import dev.arbjerg.ukulele.features.HelpContext
 import dev.arbjerg.ukulele.jda.Command
 import dev.arbjerg.ukulele.jda.CommandContext
 import net.dv8tion.jda.api.Permission
+import java.net.URL
+import java.lang.Exception
 import org.springframework.stereotype.Component
 
 @Component
 class PlayCommand(
-        val players: PlayerRegistry,
-        val apm: AudioPlayerManager
+    val players: PlayerRegistry,
+    val apm: AudioPlayerManager
 ) : Command("play", "p") {
     override suspend fun CommandContext.invoke() {
         if (!ensureVoiceChannel()) return
-        val identifier = argumentText
+        val identifier =
+            if(argumentText.startsWith("http://") || argumentText.startsWith("https://"))
+                argumentText
+            else
+                "ytsearch:$argumentText"
+
         apm.loadItem(identifier, Loader(this, player, identifier))
     }
 
+    fun CommandContext.ensureVoiceChannel(): Boolean {
+        val ourVc = guild.selfMember.voiceState?.channel
+        val theirVc = invoker.voiceState?.channel
+
+        if (ourVc == null && theirVc == null) {
+            reply("You need to be in a voice channel")
+            return false
+        }
+
+        if (ourVc != theirVc && theirVc != null)  {
+            val canTalk = selfMember.hasPermission(Permission.VOICE_CONNECT, Permission.VOICE_SPEAK)
+            if (!canTalk) {
+                reply("I need permission to connect and speak in ${theirVc.name}")
+                return false
+            }
+
+            guild.audioManager.openAudioConnection(theirVc)
+            guild.audioManager.sendingHandler = player
+            return true
+        }
+
+        return ourVc != null
+    }
+
+    fun checkValidUrl(url: String): Boolean {
+        return try {
+            URL(url).toURI()
+            true
+        }
+        catch (e: Exception) {
+            false
+        }
+    }
+
     class Loader(
-            private val ctx: CommandContext,
-            private val player: Player,
-            private val identifier: String
+        private val ctx: CommandContext,
+        private val player: Player,
+        private val identifier: String
     ) : AudioLoadResultHandler {
         override fun trackLoaded(track: AudioTrack) {
             val started = player.add(track)
@@ -39,8 +80,13 @@ class PlayCommand(
         }
 
         override fun playlistLoaded(playlist: AudioPlaylist) {
-            player.add(*playlist.tracks.toTypedArray())
-            ctx.reply("Added `${playlist.tracks.size}` tracks from `${playlist.name}`")
+            if (identifier.startsWith("ytsearch:")) {
+                trackLoaded(playlist.tracks.first())  // Pick first search result from Lavaplayer ytsearch playlist
+            }
+            else {
+                player.add(*playlist.tracks.toTypedArray())
+                ctx.reply("Added `${playlist.tracks.size}` tracks from `${playlist.name}`")
+            }
         }
 
         override fun noMatches() {

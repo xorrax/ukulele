@@ -10,14 +10,18 @@ import com.sedmelluq.discord.lavaplayer.track.playback.MutableAudioFrame
 import dev.arbjerg.ukulele.data.GuildProperties
 import dev.arbjerg.ukulele.data.GuildPropertiesService
 import dev.arbjerg.ukulele.jda.CommandContext
+import kotlinx.coroutines.Runnable
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import net.dv8tion.jda.api.audio.AudioSendHandler
-import kotlinx.coroutines.*
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.nio.Buffer
 import java.nio.ByteBuffer
-
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.ScheduledFuture
 
 class Player(val beans: Beans, guildProperties: GuildProperties, cc: CommandContext) : AudioEventAdapter(), AudioSendHandler {
     @Component
@@ -25,6 +29,8 @@ class Player(val beans: Beans, guildProperties: GuildProperties, cc: CommandCont
             val apm: AudioPlayerManager,
             val guildProperties: GuildPropertiesService
     )
+
+    private var task: ScheduledFuture<*>? = null;
     private val context = cc
     private val guildId = guildProperties.guildId
     private val queue = TrackQueue()
@@ -66,6 +72,11 @@ class Player(val beans: Beans, guildProperties: GuildProperties, cc: CommandCont
      * @return whether or not we started playing
      */
     fun add(vararg tracks: AudioTrack): Boolean {
+        // Cancel the task, if there is one
+        if(task != null) {
+            task?.cancel(false)
+        }
+
         queue.add(*tracks)
         if (player.playingTrack == null) {
             player.playTrack(queue.take()!!)
@@ -97,6 +108,10 @@ class Player(val beans: Beans, guildProperties: GuildProperties, cc: CommandCont
         return skipped
     }
 
+    fun clear() {
+        queue.clear();
+    }
+
     fun pause() {
         player.isPaused = true
     }
@@ -110,12 +125,9 @@ class Player(val beans: Beans, guildProperties: GuildProperties, cc: CommandCont
         player.stopTrack()
     }
 
-    fun  delayedDisconnect() = runBlocking{
-        launch {
-            delay(60000L)
+    private fun  delayedDisconnect() {
             if(queue.peek() == null)
                 context.disconnect()
-        }
     }
 
     override fun onTrackEnd(player: AudioPlayer, track: AudioTrack, endReason: AudioTrackEndReason) {
@@ -124,7 +136,11 @@ class Player(val beans: Beans, guildProperties: GuildProperties, cc: CommandCont
         }
         else if(queue.peek() == null) {
             context.emptyQueue()
-            delayedDisconnect();
+
+            val scheduledExecutorService = Executors.newScheduledThreadPool(1)
+            // Create the task to execute
+            val r = Runnable { delayedDisconnect() }
+            task = scheduledExecutorService.schedule(r, 60, TimeUnit.SECONDS)
         }
 
 
